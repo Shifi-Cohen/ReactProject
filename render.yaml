@@ -1,4 +1,31 @@
+databases:
+  - name: stam-db
+    plan: free
+    region: frankfurt
+    databaseName: stam
+    user: stam
+
 services:
+  - type: web
+    name: stam-server
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stam-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 1d
+
   - type: web
     name: stam-client
     runtime: static
@@ -12,7 +39,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
-      # כתובת ה-API נקבעת בזמן הבנייה. אחרי שינוי צריך Build מחדש.
-      # הערך: https://<שם-השרת>.onrender.com/api
       - key: VITE_API_URL
-        sync: false
+        fromService:
+          name: stam-server
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL

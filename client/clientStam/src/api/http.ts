@@ -1,8 +1,17 @@
 import axios, { isAxiosError } from 'axios'
 import type { AxiosError } from 'axios'
 
+function apiBaseUrl() {
+  const value = import.meta.env.VITE_API_URL?.replace(/\/$/, '')
+  if (!value) {
+    return undefined
+  }
+
+  return value.endsWith('/api') ? value : `${value}/api`
+}
+
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: apiBaseUrl(),
 })
 
 type UnauthorizedHandler = (token: string) => void
