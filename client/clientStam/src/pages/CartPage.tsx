@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { deleteCartItem, moveGuestCart, updateCartItem } from '../api/cart'
@@ -121,7 +121,7 @@ function CartPage() {
     removeItem({ productId: id })
   }
 
-  let cartList = (
+  let cartList: ReactNode = (
     <div>
       <p className="notice">הסל ריק</p>
       <Link to="/products" className={textLinkClass}>
