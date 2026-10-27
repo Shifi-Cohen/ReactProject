@@ -1,4 +1,4 @@
-import { BadgeCheck, BookOpen, DoorClosed, Feather, Gem, ScrollText, ShieldCheck, ShoppingBag, Star } from 'lucide-react'
+import { BadgeCheck, BookOpen, DoorClosed, Feather, Gem, ScrollText, ShieldCheck, ShoppingBag } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 const logoUrl = 'https://res.cloudinary.com/dj01kpiv/image/upload/v1792959159/%D7%9C%D7%95%D7%92%D7%95_%D7%94%D7%99%D7%99%D7%98%D7%A7%D7%95%D7%9C%D7%9E%D7%95%D7%AA_%D7%A2%D7%9D_%D7%A7%D7%95%D7%9C%D7%9E%D7%95%D7%A1_%D7%95%D7%A0%D7%95%D7%A6%D7%94.png'
@@ -20,18 +20,6 @@ const stories = [
     text: 'קיבלתי מענה מהיר, והקולמוס לספר תורה הגיע שמור היטב.',
   },
 ]
-
-function Stars() {
-  return (
-    <span className="stars" aria-label="דירוג מלא">
-      <Star aria-hidden="true" />
-      <Star aria-hidden="true" />
-      <Star aria-hidden="true" />
-      <Star aria-hidden="true" />
-      <Star aria-hidden="true" />
-    </span>
-  )
-}
 
 function HomePage() {
   return (
@@ -139,7 +127,6 @@ function HomePage() {
                   {story.name.slice(0, 1)}
                 </span>
                 <div>
-                  <Stars />
                   <p className="line">
                     {story.name}, {story.city}
                   </p>

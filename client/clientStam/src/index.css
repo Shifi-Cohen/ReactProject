@@ -512,18 +512,9 @@ h6 {
 }
 
 .benefit-icon svg,
-.use-icon svg,
-.stars svg {
+.use-icon svg {
   width: 1.15rem;
   height: 1.15rem;
-}
-
-.stars {
-  @apply flex gap-1 text-gold;
-}
-
-.stars svg {
-  fill: currentColor;
 }
 
 .review-top {
@@ -693,5 +684,21 @@ h6 {
 }
 
 .picked {
-  @apply mb-8 space-y-2;
+  @apply mb-8 space-y-3;
+}
+
+.picked-row {
+  @apply rounded-soft border border-gold-light bg-white p-4;
+}
+
+.script-choices {
+  @apply mt-3 flex flex-wrap items-center gap-x-6 gap-y-2;
+}
+
+.script-choices legend {
+  @apply me-1;
+}
+
+.script-choices .choice {
+  @apply mb-0;
 }

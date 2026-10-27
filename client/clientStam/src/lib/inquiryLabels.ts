@@ -5,9 +5,16 @@ export const statusLabels: Record<string, string> = {
   CANCELLED: 'בוטלה',
 }
 
+export type ScriptChoice = 'ASHKENAZI' | 'SEPHARDI'
+
 export const scriptLabels: Record<string, string> = {
   ASHKENAZI: 'אשכנזי',
   SEPHARDI: 'ספרדי',
+  MIXED: 'אשכנזי וספרדי',
+}
+
+export function isScriptChoice(value: unknown): value is ScriptChoice {
+  return value === 'ASHKENAZI' || value === 'SEPHARDI'
 }
 
 export const statusOptions = Object.keys(statusLabels)

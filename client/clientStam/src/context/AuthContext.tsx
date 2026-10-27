@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { setUnauthorizedHandler } from '../api/http'
 
 const tokenKey = 'user-token'
 const userKey = 'current-user'
@@ -139,6 +141,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<AuthUser | null>(stored.user)
   const [sessionMessage, setSessionMessage] = useState(stored.sessionMessage)
   const leavingRef = useRef(false)
+  const navigate = useNavigate()
+  const logoutRef = useRef<(options?: LogoutInput) => void>(() => {})
 
   useEffect(() => {
     if (stored.token) {
@@ -157,6 +161,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(null)
     setSessionMessage(expired ? expiredMessage : '')
   }
+
+  logoutRef.current = logout
+
+  useEffect(() => {
+    setUnauthorizedHandler((rejectedToken) => {
+      const currentToken = localStorage.getItem(tokenKey)
+      if (!currentToken || currentToken !== rejectedToken) {
+        return
+      }
+
+      logoutRef.current({ expired: true })
+      navigate('/login', { replace: true })
+    })
+
+    return () => {
+      setUnauthorizedHandler(() => {})
+    }
+  }, [navigate])
 
   function isLeaving() {
     return leavingRef.current

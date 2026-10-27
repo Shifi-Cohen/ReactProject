@@ -1,5 +1,5 @@
 const prisma = require("../lib/prisma");
-const { hashPassword, toPublicUser } = require("../lib/auth");
+const { hashPassword, toPublicUser, verifyPassword } = require("../lib/auth");
 const { isValidEmail, normalizeEmail, parsePositiveInt, parseOptionalText } = require("../lib/parsers");
 
 async function updateUser(req, res, next) {
@@ -41,6 +41,14 @@ async function updateUser(req, res, next) {
     if (req.body.password !== undefined) {
       if (typeof req.body.password !== "string" || req.body.password.length < 6) {
         return res.status(400).json({ message: "סיסמה חייבת להכיל לפחות 6 תווים." });
+      }
+      const currentPassword = req.body.currentPassword;
+      if (typeof currentPassword !== "string" || !currentPassword) {
+        return res.status(400).json({ message: "יש להזין את הסיסמה הנוכחית." });
+      }
+      const matches = await verifyPassword(currentPassword, existing.password);
+      if (!matches) {
+        return res.status(400).json({ message: "הסיסמה הנוכחית שגויה." });
       }
       data.password = await hashPassword(req.body.password);
     }

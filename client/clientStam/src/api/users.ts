@@ -8,6 +8,7 @@ type UpdateUserInput = {
   email: string
   phone: string
   password: string
+  currentPassword: string
 }
 
 type UserBody = {
@@ -15,9 +16,18 @@ type UserBody = {
   email?: string
   phone?: string
   password?: string
+  currentPassword?: string
 }
 
-export async function updateUser({ token, id, fullName, email, phone, password }: UpdateUserInput) {
+export async function updateUser({
+  token,
+  id,
+  fullName,
+  email,
+  phone,
+  password,
+  currentPassword,
+}: UpdateUserInput) {
   const body: UserBody = {}
   const cleanName = fullName.trim()
   const cleanEmail = email.trim()
@@ -37,6 +47,7 @@ export async function updateUser({ token, id, fullName, email, phone, password }
 
   if (password) {
     body.password = password
+    body.currentPassword = currentPassword
   }
 
   const response = await http.put(`/users/${id}`, body, {

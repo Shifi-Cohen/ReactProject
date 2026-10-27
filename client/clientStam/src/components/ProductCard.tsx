@@ -1,8 +1,7 @@
-import { useState } from 'react'
 import { ShoppingBag } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useGuestCart } from '../context/GuestCartContext'
-import { cardClass, cardTitleClass, buttonClass } from '../lib/styles'
+import { useAddToCart } from '../hooks/useAddToCart'
+import { cardClass, cardTitleClass, buttonClass, errorClass } from '../lib/styles'
 
 type ProductCardProps = {
   id: number
@@ -14,16 +13,10 @@ type ProductCardProps = {
 }
 
 function ProductCard({ id, name, description, imageUrl, categoryName, isAvailable }: ProductCardProps) {
-  const { addItem } = useGuestCart()
-  const [addedMessage, setAddedMessage] = useState('')
+  const { addToCart, addedMessage, errorMessage, isAdding } = useAddToCart()
 
-  function addToCart() {
-    if (!isAvailable) {
-      return
-    }
-
-    addItem({ productId: id, name, imageUrl })
-    setAddedMessage('המוצר נוסף בהצלחה')
+  function addThisProduct() {
+    addToCart({ productId: id, name, imageUrl, isAvailable })
   }
 
   let statusClass = 'product-status'
@@ -48,8 +41,8 @@ function ProductCard({ id, name, description, imageUrl, categoryName, isAvailabl
       <div className="card-actions">
         <button
           type="button"
-          onClick={addToCart}
-          disabled={!isAvailable}
+          onClick={addThisProduct}
+          disabled={!isAvailable || isAdding}
           className={buttonClass}
         >
           <ShoppingBag aria-hidden="true" />
@@ -60,6 +53,7 @@ function ProductCard({ id, name, description, imageUrl, categoryName, isAvailabl
             {addedMessage}
           </p>
         ) : null}
+        {errorMessage ? <p className={errorClass}>{errorMessage}</p> : null}
       </div>
     </div>
   )

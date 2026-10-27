@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -22,6 +22,7 @@ enum InquiryStatus {
 enum ScriptType {
   ASHKENAZI
   SEPHARDI
+  MIXED
 }
 
 model User {
@@ -71,7 +72,9 @@ model CartItem {
   cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
   productId Int
   product   Product @relation(fields: [productId], references: [id])
-  quantity  Int     @default(1)
+  quantity  Int         @default(1)
+  selected  Boolean     @default(true)
+  script    ScriptType?
 
   @@unique([cartId, productId])
 }
@@ -94,6 +97,7 @@ model InquiryItem {
   inquiryId Int
   inquiry   Inquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
   productId Int
-  product   Product @relation(fields: [productId], references: [id])
-  quantity  Int     @default(1)
+  product   Product    @relation(fields: [productId], references: [id])
+  quantity  Int        @default(1)
+  script    ScriptType
 }

@@ -3,12 +3,15 @@ import { getCart } from '../api/cart'
 import { useAuth } from '../context/AuthContext'
 import { useGuestCart } from '../context/GuestCartContext'
 import { requireToken } from '../lib/requireToken'
+import type { ScriptChoice } from '../lib/inquiryLabels'
 
 export type CartRow = {
   id: number
   name: string
   imageUrl: string
   quantity: number
+  selected: boolean
+  script: ScriptChoice | null
 }
 
 export function useCartRows() {
@@ -24,23 +27,27 @@ export function useCartRows() {
   let rows: CartRow[] = []
 
   if (user && cart) {
-    rows = cart.items.map(({ id, quantity, product }) => {
+    rows = cart.items.map(({ id, quantity, selected, script, product }) => {
       return {
         id,
         name: product.name,
         imageUrl: product.imageUrl,
         quantity,
+        selected,
+        script,
       }
     })
   }
 
   if (!user) {
-    rows = items.map(({ productId, name, imageUrl, quantity }) => {
+    rows = items.map(({ productId, name, imageUrl, quantity, selected, script }) => {
       return {
         id: productId,
         name,
         imageUrl,
         quantity,
+        selected,
+        script,
       }
     })
   }

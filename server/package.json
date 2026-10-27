@@ -5,6 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "build": "prisma generate && prisma migrate deploy",
     "dev": "node --watch src/index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -21,9 +22,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.3"
-  },
-  "devDependencies": {
+    "express-rate-limit": "^8.7.1",
+    "jsonwebtoken": "^9.0.3",
     "prisma": "^6.16.2"
   }
 }

@@ -1,16 +1,14 @@
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { useParams } from 'react-router-dom'
 import { getProduct } from '../api/products'
-import { useGuestCart } from '../context/GuestCartContext'
+import { useAddToCart } from '../hooks/useAddToCart'
 import { readServerMessage } from '../lib/serverMessage'
-import { pageClass, pageTitleClass, goldTextClass } from '../lib/styles'
+import { pageClass, pageTitleClass, goldTextClass, errorClass } from '../lib/styles'
 
 function ProductPage() {
   const { id } = useParams()
-  const { addItem } = useGuestCart()
-  const [addedMessage, setAddedMessage] = useState('')
+  const { addToCart, addedMessage, errorMessage, isAdding } = useAddToCart()
 
   const { data: product, isPending, isError, error } = useQuery({
     queryKey: ['product', id],
@@ -49,13 +47,8 @@ function ProductPage() {
 
   const { id: productId, name, imageUrl, description, isAvailable, category } = product
 
-  function addToCart() {
-    if (!isAvailable) {
-      return
-    }
-
-    addItem({ productId, name, imageUrl })
-    setAddedMessage('המוצר נוסף בהצלחה')
+  function addThisProduct() {
+    addToCart({ productId, name, imageUrl, isAvailable })
   }
 
   return (
@@ -67,8 +60,8 @@ function ProductPage() {
       <p className="block-gap">{isAvailable ? 'זמין' : 'לא זמין'}</p>
       <button
         type="button"
-        onClick={addToCart}
-        disabled={!isAvailable}
+        onClick={addThisProduct}
+        disabled={!isAvailable || isAdding}
         className="btn btn-below"
       >
         הוספה לסל
@@ -78,6 +71,7 @@ function ProductPage() {
           {addedMessage}
         </p>
       ) : null}
+      {errorMessage ? <p className={errorClass}>{errorMessage}</p> : null}
     </article>
   )
 }

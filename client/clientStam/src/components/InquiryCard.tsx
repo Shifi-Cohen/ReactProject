@@ -10,12 +10,17 @@ type InquiryCardProps = {
 function InquiryCard({ inquiry, children }: InquiryCardProps) {
   const { createdAt, status, script, contactEmail, contactPhone, message, items } = inquiry
   const tone = statusClassNames[status] ?? ''
+  const lineScripts = items.map((item) => item.script).filter((value) => value)
+  const uniqueScripts = [...new Set(lineScripts)]
+  const scriptText = uniqueScripts.length > 1
+    ? 'אשכנזי וספרדי'
+    : scriptLabels[uniqueScripts[0] ?? script] ?? script
 
   return (
     <li className={`card card-pad inquiry-card ${tone}`}>
       <div className="inquiry-top">
         <p className={`status-badge ${tone}`}>{statusLabels[status] ?? status}</p>
-        <p className="script-badge">{scriptLabels[script] ?? script}</p>
+        <p className="script-badge">{scriptText}</p>
       </div>
       <p className="inquiry-date">{new Date(createdAt).toLocaleDateString('he-IL')}</p>
       {children}
@@ -26,6 +31,7 @@ function InquiryCard({ inquiry, children }: InquiryCardProps) {
         {items.map((item) => (
           <li key={item.id}>
             {item.product.name} · כמות {item.quantity}
+            {item.script ? ` · ${scriptLabels[item.script] ?? item.script}` : ''}
           </li>
         ))}
       </ul>

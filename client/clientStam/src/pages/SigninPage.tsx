@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { login, signin } from '../api/auth'
@@ -7,6 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { useGuestCart } from '../context/GuestCartContext'
 import { validateEmail } from '../lib/email'
 import { notEmpty } from '../lib/notEmpty'
+import { validatePhone } from '../lib/phone'
 import { readServerMessage } from '../lib/serverMessage'
 import { pageClass, pageTitleClass, buttonClass, inputClass, errorClass, formMessageClass } from '../lib/styles'
 
@@ -19,8 +21,9 @@ type SigninForm = {
 
 function SigninPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { saveLogin } = useAuth()
-  const { items, clearItems } = useGuestCart()
+  const { items, clearItems, markMergeFailed, clearMergeFailed } = useGuestCart()
   const [serverMessage, setServerMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
   const {
@@ -51,8 +54,15 @@ function SigninPage() {
       })
       const { token, user } = await login({ email: cleanEmail, password })
       saveLogin({ token, user })
-      await moveGuestCart({ token, items, clearItems })
-      navigate('/')
+      const { notice, failed } = await moveGuestCart({
+        token,
+        items,
+        clearItems,
+        markMergeFailed,
+        clearMergeFailed,
+      })
+      await queryClient.invalidateQueries({ queryKey: ['cart'] })
+      navigate('/', !failed && notice ? { state: { cartNotice: notice } } : undefined)
     } catch (error) {
       setServerMessage(readServerMessage(error, 'לא הצלחנו להירשם'))
       setIsSending(false)
@@ -92,9 +102,12 @@ function SigninPage() {
           טלפון
           <input
             type="tel"
-            {...register('phone')}
+            {...register('phone', {
+              validate: validatePhone,
+            })}
             className={inputClass}
           />
+          {errors.phone ? <p className={errorClass}>{errors.phone.message}</p> : null}
         </label>
         <label className="field">
           סיסמה

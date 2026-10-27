@@ -1,4 +1,5 @@
 import http, { authHeader } from './http'
+import type { ScriptChoice } from '../lib/inquiryLabels'
 
 export type Inquiry = {
   id: number
@@ -10,10 +11,12 @@ export type Inquiry = {
   createdAt: string
   user: {
     fullName: string
+    phone: string | null
   } | null
   items: {
     id: number
     quantity: number
+    script: string
     product: {
       name: string
     }
@@ -23,10 +26,10 @@ export type Inquiry = {
 type InquiryItemInput = {
   productId: number
   quantity: number
+  script: ScriptChoice
 }
 
 type CreateInquiryInput = {
-  script: string
   contactEmail: string
   contactPhone: string
   message: string
@@ -34,14 +37,12 @@ type CreateInquiryInput = {
 }
 
 export async function createInquiry({
-  script,
   contactEmail,
   contactPhone,
   message,
   items,
 }: CreateInquiryInput) {
   const response = await http.post('/inquiries', {
-    script,
     contactEmail,
     contactPhone,
     message,
@@ -53,8 +54,10 @@ export async function createInquiry({
 
 type CreateInquiryFromCartInput = {
   token: string
-  itemIds: number[]
-  script: string
+  items: {
+    id: number
+    script: ScriptChoice
+  }[]
   contactEmail: string
   contactPhone: string
   message: string
@@ -62,15 +65,14 @@ type CreateInquiryFromCartInput = {
 
 export async function createInquiryFromCart({
   token,
-  itemIds,
-  script,
+  items,
   contactEmail,
   contactPhone,
   message,
 }: CreateInquiryFromCartInput) {
   const response = await http.post(
     '/inquiries/from-cart',
-    { itemIds, script, contactEmail, contactPhone, message },
+    { items, contactEmail, contactPhone, message },
     {
       headers: authHeader(token),
     },

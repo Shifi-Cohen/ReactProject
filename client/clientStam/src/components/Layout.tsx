@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Feather, Home, Inbox, LogIn, LogOut, Mail, MapPin, Menu, Package, Phone, ShoppingBag, Tags, User, UserPlus, X } from 'lucide-react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { mergeFailedMessage } from '../api/cart'
 import { useAuth } from '../context/AuthContext'
+import { useGuestCart } from '../context/GuestCartContext'
 import { useCartRows } from '../hooks/useCartRows'
 
 const logoUrl = 'https://res.cloudinary.com/dj01kpiv/image/upload/v1792959159/%D7%9C%D7%95%D7%92%D7%95_%D7%94%D7%99%D7%99%D7%98%D7%A7%D7%95%D7%9C%D7%9E%D7%95%D7%AA_%D7%A2%D7%9D_%D7%A7%D7%95%D7%9C%D7%9E%D7%95%D7%A1_%D7%95%D7%A0%D7%95%D7%A6%D7%94.png'
@@ -10,7 +12,11 @@ function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, logout, sessionMessage, clearLeaving } = useAuth()
+  const pageState = location.state as { cartNotice?: unknown } | null
+  const cartNotice = pageState && typeof pageState.cartNotice === 'string' ? pageState.cartNotice : ''
   const { rows } = useCartRows()
+  const { items, mergeFailed } = useGuestCart()
+  const showMergeFailure = Boolean(user) && mergeFailed && items.length > 0
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -50,6 +56,12 @@ function Layout() {
 
   for (const row of rows) {
     cartCount = cartCount + row.quantity
+  }
+
+  if (showMergeFailure) {
+    for (const item of items) {
+      cartCount = cartCount + item.quantity
+    }
   }
 
   let menuClass = 'site-nav'
@@ -99,7 +111,7 @@ function Layout() {
             </Link>
             <Link to="/cart" className={navClass('/cart')}>
               <ShoppingBag aria-hidden="true" />
-              עגלה
+              סל
               <span className="cart-count">{cartCount}</span>
             </Link>
             {user ? (
@@ -157,6 +169,18 @@ function Layout() {
         </p>
       ) : null}
 
+      {cartNotice ? (
+        <p className="session-note" role="status">
+          {cartNotice}
+        </p>
+      ) : null}
+
+      {showMergeFailure ? (
+        <p className="session-note" role="status">
+          {mergeFailedMessage} אפשר לנסות שוב בעמוד הסל.
+        </p>
+      ) : null}
+
       <main className="site-main">
         <Outlet />
       </main>
@@ -176,7 +200,7 @@ function Layout() {
             </Link>
             <Link to="/cart" className="footer-link">
               <ShoppingBag aria-hidden="true" />
-              עגלה
+              סל
             </Link>
             <Link to="/login" className="footer-link">
               <LogIn aria-hidden="true" />
@@ -200,13 +224,14 @@ function Layout() {
               <MapPin aria-hidden="true" />
               פוקס אהרון דב 7 בני ברק
             </p>
-            <a className="footer-link" href="tel:0546666666">
+            <a className="footer-link" href="tel:0504151493">
               <Phone aria-hidden="true" />
               0504151493
             </a>
-            <a className="footer-link" href="mailto:info@kolmosim.co.il">
+            <a className="footer-link" href="mailto:av4151@gmail.com">
               <Mail aria-hidden="true" />
-av4151@gmail.com            </a>
+              av4151@gmail.com
+            </a>
           </div>
         </div>
         <p className="footer-bottom">תכנון ופיתוח: שיפי כהן, כל הזכויות שמורות</p>

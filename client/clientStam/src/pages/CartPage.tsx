@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
-import { deleteCartItem, updateCartItem } from '../api/cart'
+import { deleteCartItem, moveGuestCart, updateCartItem } from '../api/cart'
 import { useAuth } from '../context/AuthContext'
 import { useGuestCart } from '../context/GuestCartContext'
 import { useCartRows, type CartRow } from '../hooks/useCartRows'
@@ -12,27 +12,33 @@ function CartPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { token, user } = useAuth()
-  const { addItem, decreaseItem, removeItem } = useGuestCart()
+  const { items, mergeFailed, addItem, decreaseItem, removeItem, setSelected, clearItems, markMergeFailed, clearMergeFailed } = useGuestCart()
   const { rows: shownItems, isLoading, isError, error } = useCartRows()
   const [cartMessage, setCartMessage] = useState('')
+  const [retryNotice, setRetryNotice] = useState('')
   const [isSaving, setIsSaving] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<number[]>([])
-  const knownIds = useRef<number[] | null>(null)
+  const [isRetrying, setIsRetrying] = useState(false)
+  const pendingItems = user && mergeFailed ? items : []
+  const selectedCount = shownItems.filter((item) => item.selected).length
 
-  function toggleRow({ id }: { id: number }) {
-    const alreadySelected = selectedIds.includes(id)
+  function toggleRow({ id, selected }: CartRow) {
+    if (user) {
+      if (!token) {
+        return
+      }
 
-    if (alreadySelected) {
-      const nextIds = selectedIds.filter((selectedId) => selectedId !== id)
-      setSelectedIds(nextIds)
+      sendCartRequest(
+        updateCartItem({ token, itemId: id, selected: !selected }),
+        'לא הצלחנו לעדכן את הבחירה',
+      )
       return
     }
 
-    setSelectedIds([...selectedIds, id])
+    setSelected({ productId: id, selected: !selected })
   }
 
   function openInquiry() {
-    navigate('/inquiry', { state: { selectedIds } })
+    navigate('/inquiry')
   }
 
   async function sendCartRequest(request: Promise<unknown>, fallback: string) {
@@ -83,6 +89,29 @@ function CartPage() {
     addItem({ productId: id, name, imageUrl })
   }
 
+  async function retryMerge() {
+    if (!token || isRetrying) {
+      return
+    }
+
+    setRetryNotice('')
+    setIsRetrying(true)
+    const { notice, failed } = await moveGuestCart({
+      token,
+      items,
+      clearItems,
+      markMergeFailed,
+      clearMergeFailed,
+    })
+    await queryClient.invalidateQueries({ queryKey: ['cart'] })
+
+    if (!failed && notice) {
+      setRetryNotice(notice)
+    }
+
+    setIsRetrying(false)
+  }
+
   function removeShownRow({ id }: CartRow) {
     if (user) {
       removeCartRow({ itemId: id })
@@ -90,24 +119,6 @@ function CartPage() {
     }
 
     removeItem({ productId: id })
-  }
-
-  const shownIds = shownItems.map(({ id }) => id).join(',')
-  const ids = shownIds ? shownIds.split(',').map((value) => Number(value)) : []
-  const previousIds = knownIds.current
-
-  if (previousIds === null || previousIds.join(',') !== shownIds) {
-    knownIds.current = ids
-
-    if (previousIds === null || previousIds.length === 0) {
-      setSelectedIds(ids)
-    } else {
-      const addedIds = ids.filter((id) => !previousIds.includes(id))
-      setSelectedIds((currentIds) => {
-        const keptIds = currentIds.filter((id) => ids.includes(id))
-        return [...keptIds, ...addedIds]
-      })
-    }
   }
 
   let cartList = (
@@ -123,28 +134,31 @@ function CartPage() {
     cartList = <p className="notice">טוען...</p>
   } else if (isError) {
     cartList = <p className="notice">{readServerMessage(error, 'לא הצלחנו לטעון את הסל')}</p>
+  } else if (shownItems.length === 0 && pendingItems.length > 0) {
+    cartList = null
   } else if (shownItems.length > 0) {
     cartList = (
       <ul className="stack-loose">
-        {shownItems.map(({ id, name, imageUrl, quantity }) => (
-            <li key={id} className={cardClass}>
-              <img src={imageUrl} alt={name} className="media-short" />
+        {shownItems.map((item) => (
+            <li key={item.id} className={cardClass}>
+              <img src={item.imageUrl} alt={item.name} className="media-short" />
               <div className="card-body">
                 <label className="check-row">
                   <input
                     type="checkbox"
-                    checked={selectedIds.includes(id)}
-                    onChange={() => toggleRow({ id })}
+                    checked={item.selected}
+                    onChange={() => toggleRow(item)}
+                    disabled={Boolean(user) && isSaving}
                     className="check"
                   />
                   לצרף לפנייה
                 </label>
-                <h2 className={cardTitleClass}>{name}</h2>
-                <p className="line">כמות: {quantity}</p>
+                <h2 className={cardTitleClass}>{item.name}</h2>
+                <p className="line">כמות: {item.quantity}</p>
                 <div className="actions">
                   <button
                     type="button"
-                    onClick={() => lowerQuantity({ id, name, imageUrl, quantity })}
+                    onClick={() => lowerQuantity(item)}
                     disabled={Boolean(user) && isSaving}
                     className={smallButtonClass}
                   >
@@ -152,7 +166,7 @@ function CartPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => raiseQuantity({ id, name, imageUrl, quantity })}
+                    onClick={() => raiseQuantity(item)}
                     disabled={Boolean(user) && isSaving}
                     className={smallButtonClass}
                   >
@@ -160,7 +174,7 @@ function CartPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => removeShownRow({ id, name, imageUrl, quantity })}
+                    onClick={() => removeShownRow(item)}
                     disabled={Boolean(user) && isSaving}
                     className="btn-danger"
                   >
@@ -177,21 +191,46 @@ function CartPage() {
   return (
     <div className={pageClass}>
       <h1 className={pageTitleClass}>הסל</h1>
+      {pendingItems.length > 0 ? (
+        <div className="section-gap">
+          <p className="lead">הפריטים האלה עדיין לא עברו לחשבון</p>
+          <ul className="stack-loose">
+            {pendingItems.map(({ productId, name, imageUrl, quantity }) => (
+              <li key={productId} className={cardClass}>
+                <img src={imageUrl} alt={name} className="media-short" />
+                <div className="card-body">
+                  <h2 className={cardTitleClass}>{name}</h2>
+                  <p className="line">כמות: {quantity}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={retryMerge}
+            disabled={isRetrying}
+            className={`${buttonClass} stack-top`}
+          >
+            {isRetrying ? 'עובר...' : 'נסה שוב'}
+          </button>
+        </div>
+      ) : null}
+      {retryNotice ? <p className="status" role="status">{retryNotice}</p> : null}
       {cartList}
       {user && cartMessage ? <p className={`${goldTextClass} stack-top`}>{cartMessage}</p> : null}
       {shownItems.length > 0 ? (
         <div className="section-gap">
-          <p className="lead">נבחרו {selectedIds.length} קולמוסים</p>
+          <p className="lead">נבחרו {selectedCount} קולמוסים</p>
           <button
             type="button"
             onClick={openInquiry}
-            disabled={selectedIds.length === 0}
+            disabled={selectedCount === 0 || (Boolean(user) && isSaving)}
             className={buttonClass}
           >
             המשך לפנייה
           </button>
-          {selectedIds.length === 0 ? (
-            <p className="hint">סמני לפחות קולמוס אחד</p>
+          {selectedCount === 0 ? (
+            <p className="hint">סמן לפחות קולמוס אחד</p>
           ) : null}
         </div>
       ) : null}

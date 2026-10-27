@@ -1,68 +1,113 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { updateCartItem, type Cart } from '../api/cart'
 import { createInquiry, createInquiryFromCart } from '../api/inquiries'
 import { useAuth } from '../context/AuthContext'
 import { useGuestCart } from '../context/GuestCartContext'
-import { useCartRows } from '../hooks/useCartRows'
+import { useCartRows, type CartRow } from '../hooks/useCartRows'
 import { validateEmail } from '../lib/email'
-import { notEmpty } from '../lib/notEmpty'
+import { isScriptChoice, type ScriptChoice } from '../lib/inquiryLabels'
+import { validatePhone } from '../lib/phone'
 import { readServerMessage } from '../lib/serverMessage'
 import { pageClass, pageTitleClass, buttonClass, inputClass, errorClass, formMessageClass, textLinkClass } from '../lib/styles'
 
 type InquiryForm = {
-  script: string
   contactEmail: string
   contactPhone: string
   message: string
 }
 
-type InquiryLocationState = {
-  selectedIds?: number[]
-}
-
 function InquiryPage() {
-  const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { token, user } = useAuth()
-  const { removeItem } = useGuestCart()
+  const { token, user, saveUser } = useAuth()
+  const { removeItem, setScript } = useGuestCart()
   const { rows, isLoading, isError, error } = useCartRows()
   const [serverMessage, setServerMessage] = useState('')
   const [sentMessage, setSentMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const state = location.state as InquiryLocationState | null
-  const selectedIds = state && Array.isArray(state.selectedIds) ? state.selectedIds : []
-  const chosenItems = rows.filter((row) => selectedIds.includes(row.id))
+  const chosenItems = rows.filter((row) => row.selected)
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<InquiryForm>({
     defaultValues: {
-      script: '',
       contactEmail: user?.email ?? '',
       contactPhone: user?.phone ?? '',
       message: '',
     },
   })
 
-  async function sendInquiry({ script, contactEmail, contactPhone, message }: InquiryForm) {
+  const scriptsReady = chosenItems.every((item) => isScriptChoice(item.script))
+
+  async function chooseScript(item: CartRow, script: ScriptChoice) {
+    setServerMessage('')
+
+    if (user && token) {
+      queryClient.setQueryData<Cart>(['cart'], (current) => {
+        if (!current) {
+          return current
+        }
+
+        return {
+          ...current,
+          items: current.items.map((entry) => {
+            if (entry.id !== item.id) {
+              return entry
+            }
+
+            return {
+              ...entry,
+              script,
+            }
+          }),
+        }
+      })
+
+      try {
+        await updateCartItem({ token, itemId: item.id, script })
+      } catch (chooseError) {
+        await queryClient.invalidateQueries({ queryKey: ['cart'] })
+        setServerMessage(readServerMessage(chooseError, 'לא הצלחנו לשמור את הכתב'))
+      }
+
+      return
+    }
+
+    setScript({ productId: item.id, script })
+  }
+
+  async function sendInquiry({ contactEmail, contactPhone, message }: InquiryForm) {
+    if (!scriptsReady) {
+      setServerMessage('יש לבחור כתב לכל קולמוס.')
+      return
+    }
+
     setServerMessage('')
     setSentMessage('')
     setIsSending(true)
 
     try {
       if (user && token) {
-        await createInquiryFromCart({
+        const inquiry = await createInquiryFromCart({
           token,
-          itemIds: chosenItems.map(({ id }) => id),
-          script,
+          items: chosenItems.map((item) => ({
+            id: item.id,
+            script: item.script as ScriptChoice,
+          })),
           contactEmail,
           contactPhone,
           message,
         })
+        if (inquiry.user) {
+          saveUser({
+            ...user,
+            phone: inquiry.user.phone,
+          })
+        }
         navigate('/inquiries')
         queryClient.invalidateQueries({ queryKey: ['cart'] })
         queryClient.invalidateQueries({ queryKey: ['my-inquiries'] })
@@ -70,11 +115,14 @@ function InquiryPage() {
       }
 
       await createInquiry({
-        script,
         contactEmail,
         contactPhone,
         message,
-        items: chosenItems.map(({ id, quantity }) => ({ productId: id, quantity })),
+        items: chosenItems.map((item) => ({
+          productId: item.id,
+          quantity: item.quantity,
+          script: item.script as ScriptChoice,
+        })),
       })
 
       for (const item of chosenItems) {
@@ -128,34 +176,38 @@ function InquiryPage() {
       <h1 className={pageTitleClass}>שליחת פנייה</h1>
       <ul className="picked">
         {chosenItems.map((item) => (
-          <li key={item.id}>
-            {item.name} · כמות {item.quantity}
+          <li key={item.id} className="picked-row">
+            <p>
+              {item.name} · כמות {item.quantity}
+            </p>
+            <fieldset className="script-choices">
+              <legend>כתב</legend>
+              <label className="choice">
+                <input
+                  type="radio"
+                  name={`script-${item.id}`}
+                  checked={item.script === 'ASHKENAZI'}
+                  onChange={() => chooseScript(item, 'ASHKENAZI')}
+                  className="radio"
+                />
+                אשכנזי
+              </label>
+              <label className="choice">
+                <input
+                  type="radio"
+                  name={`script-${item.id}`}
+                  checked={item.script === 'SEPHARDI'}
+                  onChange={() => chooseScript(item, 'SEPHARDI')}
+                  className="radio"
+                />
+                ספרדי
+              </label>
+            </fieldset>
           </li>
         ))}
       </ul>
+      {scriptsReady ? null : <p className="hint">יש לבחור כתב לכל קולמוס.</p>}
       <form noValidate onSubmit={handleSubmit(sendInquiry)}>
-        <fieldset className="choice-group">
-          <legend>כתב</legend>
-          <label className="choice">
-            <input
-              type="radio"
-              value="ASHKENAZI"
-              {...register('script', { required: 'יש לבחור כתב אשכנזי או ספרדי.' })}
-              className="radio"
-            />
-            כתב אשכנזי
-          </label>
-          <label className="choice">
-            <input
-              type="radio"
-              value="SEPHARDI"
-              {...register('script', { required: 'יש לבחור כתב אשכנזי או ספרדי.' })}
-              className="radio"
-            />
-            כתב ספרדי
-          </label>
-          {errors.script ? <p className={errorClass}>{errors.script.message}</p> : null}
-        </fieldset>
         <label className="field">
           אימייל
           <input
@@ -174,7 +226,7 @@ function InquiryPage() {
           טלפון
           <input
             type="tel"
-            {...register('contactPhone', { validate: notEmpty('יש להזין טלפון') })}
+            {...register('contactPhone', { validate: validatePhone })}
             className={inputClass}
           />
           {errors.contactPhone ? (
@@ -192,10 +244,10 @@ function InquiryPage() {
         {serverMessage ? <p className={formMessageClass}>{serverMessage}</p> : null}
         <button
           type="submit"
-          disabled={isSending}
+          disabled={isSending || !scriptsReady}
           className={buttonClass}
         >
-          {isSending ? 'שולחת...' : 'שליחת פנייה'}
+          {isSending ? 'שולח...' : 'שליחת פנייה'}
         </button>
       </form>
     </div>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { login } from '../api/auth'
@@ -16,8 +17,9 @@ type LoginForm = {
 
 function LoginPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { saveLogin } = useAuth()
-  const { items, clearItems } = useGuestCart()
+  const { items, clearItems, markMergeFailed, clearMergeFailed } = useGuestCart()
   const [serverMessage, setServerMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
   const {
@@ -33,8 +35,15 @@ function LoginPage() {
     try {
       const { token, user } = await login({ email: email.trim(), password })
       saveLogin({ token, user })
-      await moveGuestCart({ token, items, clearItems })
-      navigate('/')
+      const { notice, failed } = await moveGuestCart({
+        token,
+        items,
+        clearItems,
+        markMergeFailed,
+        clearMergeFailed,
+      })
+      await queryClient.invalidateQueries({ queryKey: ['cart'] })
+      navigate('/', !failed && notice ? { state: { cartNotice: notice } } : undefined)
     } catch (error) {
       setServerMessage(readServerMessage(error, 'לא הצלחנו להתחבר'))
       setIsSending(false)

@@ -1,5 +1,5 @@
 const prisma = require("../lib/prisma");
-const { parseOptionalText, isValidEmail, normalizeEmail } = require("../lib/parsers");
+const { parseOptionalText, isValidEmail, isValidIsraeliPhone, normalizeEmail } = require("../lib/parsers");
 const { hashPassword, verifyPassword, signToken, toPublicUser } = require("../lib/auth");
 
 function validatePassword(password) {
@@ -13,7 +13,7 @@ async function signin(req, res, next) {
   try {
     const email = normalizeEmail(req.body.email);
     const fullName = parseOptionalText(req.body.fullName);
-    const phone = parseOptionalText(req.body.phone) ?? null;
+    const phone = parseOptionalText(req.body.phone);
     const password = req.body.password;
 
     if (!isValidEmail(email)) {
@@ -21,6 +21,12 @@ async function signin(req, res, next) {
     }
     if (!fullName) {
       return res.status(400).json({ message: "שם מלא נדרש לצורך הרשמה." });
+    }
+    if (!phone) {
+      return res.status(400).json({ message: "יש להזין טלפון." });
+    }
+    if (!isValidIsraeliPhone(phone)) {
+      return res.status(400).json({ message: "יש להזין טלפון ישראלי תקין." });
     }
     const passwordError = validatePassword(password);
     if (passwordError) {

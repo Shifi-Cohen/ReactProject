@@ -1,6 +1,16 @@
 const prisma = require("../lib/prisma");
 const { parsePositiveInt, parsePositiveQuantity } = require("../lib/parsers");
 
+const SCRIPT_TYPES = ["ASHKENAZI", "SEPHARDI"];
+
+function readScript(value) {
+  if (SCRIPT_TYPES.includes(value)) {
+    return value;
+  }
+
+  return null;
+}
+
 const cartInclude = {
   items: {
     include: {
@@ -42,11 +52,23 @@ function normalizeCartItems(rawItems) {
       return { error: "כמות חייבת להיות מספר שלם חיובי." };
     }
 
-    byProductId.set(productId, (byProductId.get(productId) || 0) + quantity);
+    const current = byProductId.get(productId) || { quantity: 0, selected: false, script: null };
+    const selected = item.selected === undefined ? true : item.selected === true;
+    const script = readScript(item.script) || current.script;
+    byProductId.set(productId, {
+      quantity: current.quantity + quantity,
+      selected: current.selected || selected,
+      script,
+    });
   }
 
   return {
-    items: [...byProductId.entries()].map(([productId, quantity]) => ({ productId, quantity })),
+    items: [...byProductId.entries()].map(([productId, item]) => ({
+      productId,
+      quantity: item.quantity,
+      selected: item.selected,
+      script: item.script,
+    })),
   };
 }
 
@@ -115,13 +137,26 @@ async function addCartItem(req, res, next) {
 async function updateCartItem(req, res, next) {
   try {
     const itemId = parsePositiveInt(req.params.itemId);
+    const hasQuantity = req.body.quantity !== undefined;
+    const hasSelected = req.body.selected !== undefined;
+    const hasScript = req.body.script !== undefined;
     const quantity = Number(req.body.quantity);
+    const script = readScript(req.body.script);
 
     if (!itemId) {
       return res.status(400).json({ message: "מזהה פריט לא תקין." });
     }
-    if (!Number.isInteger(quantity) || quantity < 0) {
+    if (!hasQuantity && !hasSelected && !hasScript) {
+      return res.status(400).json({ message: "לא נשלחו שדות לעדכון." });
+    }
+    if (hasQuantity && (!Number.isInteger(quantity) || quantity < 0)) {
       return res.status(400).json({ message: "כמות חייבת להיות מספר שלם." });
+    }
+    if (hasSelected && typeof req.body.selected !== "boolean") {
+      return res.status(400).json({ message: "סימון הפריט לא תקין." });
+    }
+    if (hasScript && !script) {
+      return res.status(400).json({ message: "יש לבחור כתב אשכנזי או ספרדי." });
     }
 
     const cart = await prisma.$transaction(async (tx) => {
@@ -131,12 +166,22 @@ async function updateCartItem(req, res, next) {
         return { notFound: true };
       }
 
-      if (quantity === 0) {
+      if (hasQuantity && quantity === 0) {
         await tx.cartItem.delete({ where: { id: itemId } });
       } else {
+        const data = {};
+        if (hasQuantity) {
+          data.quantity = quantity;
+        }
+        if (hasSelected) {
+          data.selected = req.body.selected;
+        }
+        if (hasScript) {
+          data.script = script;
+        }
         await tx.cartItem.update({
           where: { id: itemId },
-          data: { quantity },
+          data,
         });
       }
 
@@ -227,17 +272,37 @@ async function mergeCart(req, res, next) {
 
     if (parsed.items.length === 0) {
       const cart = await getOrCreateCart(req.user.id);
-      return res.json({ cart, skippedProductIds: [] });
+      return res.json({
+        cart,
+        skippedProductIds: [],
+        missingProductIds: [],
+        unavailableProductIds: [],
+      });
     }
 
     const productIds = parsed.items.map((item) => item.productId);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
     });
+    const found = new Map(products.map((product) => [product.id, product]));
+    const missingProductIds = [];
+    const unavailableProductIds = [];
+
+    for (const id of productIds) {
+      const product = found.get(id);
+      if (!product) {
+        missingProductIds.push(id);
+        continue;
+      }
+      if (!product.isAvailable) {
+        unavailableProductIds.push(id);
+      }
+    }
+
+    const skippedProductIds = [...missingProductIds, ...unavailableProductIds];
     const available = new Map(
       products.filter((product) => product.isAvailable).map((product) => [product.id, product]),
     );
-    const skippedProductIds = productIds.filter((id) => !available.has(id));
 
     const cart = await prisma.$transaction(async (tx) => {
       const current = await getOrCreateCart(req.user.id, tx);
@@ -250,7 +315,11 @@ async function mergeCart(req, res, next) {
         if (existing) {
           await tx.cartItem.update({
             where: { id: existing.id },
-            data: { quantity: existing.quantity + item.quantity },
+            data: {
+              quantity: existing.quantity + item.quantity,
+              selected: existing.selected || item.selected,
+              script: existing.script || item.script,
+            },
           });
         } else {
           const created = await tx.cartItem.create({
@@ -258,6 +327,8 @@ async function mergeCart(req, res, next) {
               cartId: current.id,
               productId: item.productId,
               quantity: item.quantity,
+              selected: item.selected,
+              script: item.script,
             },
           });
           existingByProduct.set(item.productId, created);
@@ -275,7 +346,7 @@ async function mergeCart(req, res, next) {
       });
     });
 
-    return res.json({ cart, skippedProductIds });
+    return res.json({ cart, skippedProductIds, missingProductIds, unavailableProductIds });
   } catch (error) {
     next(error);
   }

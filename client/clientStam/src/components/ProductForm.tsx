@@ -62,7 +62,7 @@ function ProductForm({ defaultValues, categories, isSaving, serverMessage, onSav
           {...register('categoryId', { validate: notEmpty('יש לבחור קטגוריה') })}
           className={inputClass}
         >
-          <option value="">בחרי קטגוריה</option>
+          <option value="">בחר קטגוריה</option>
           {categories.map(({ id, name }) => (
             <option key={id} value={String(id)}>
               {name}
@@ -86,7 +86,7 @@ function ProductForm({ defaultValues, categories, isSaving, serverMessage, onSav
       </label>
       {serverMessage ? <p className={formMessageClass}>{serverMessage}</p> : null}
       <button type="submit" disabled={isSaving} className={buttonClass}>
-        {isSaving ? 'שומרת...' : 'שמירה'}
+        {isSaving ? 'שומר...' : 'שמירה'}
       </button>
     </form>
   )

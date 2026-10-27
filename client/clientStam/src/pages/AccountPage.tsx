@@ -11,6 +11,7 @@ type AccountForm = {
   fullName: string
   email: string
   phone: string
+  currentPassword: string
   password: string
 }
 
@@ -29,11 +30,12 @@ function AccountPage() {
       fullName: user?.fullName ?? '',
       email: user?.email ?? '',
       phone: user?.phone ?? '',
+      currentPassword: '',
       password: '',
     },
   })
 
-  async function sendAccount({ fullName, email, phone, password }: AccountForm) {
+  async function sendAccount({ fullName, email, phone, currentPassword, password }: AccountForm) {
     if (!token || !user) {
       return
     }
@@ -50,12 +52,14 @@ function AccountPage() {
         email,
         phone,
         password,
+        currentPassword,
       })
       saveUser(nextUser)
       reset({
         fullName: nextUser.fullName,
         email: nextUser.email,
         phone: nextUser.phone ?? '',
+        currentPassword: '',
         password: '',
       })
       setSavedMessage('הפרטים נשמרו')
@@ -111,9 +115,33 @@ function AccountPage() {
           />
         </label>
         <label className="field">
+          סיסמה נוכחית
+          <input
+            type="password"
+            autoComplete="current-password"
+            {...register('currentPassword', {
+              validate: (currentPassword, form) => {
+                if (!form.password) {
+                  return true
+                }
+                if (currentPassword) {
+                  return true
+                }
+                return 'יש להזין את הסיסמה הנוכחית.'
+              },
+            })}
+            className={inputClass}
+          />
+          <p className="hint">נדרשת רק כשמחליפים סיסמה.</p>
+          {errors.currentPassword ? (
+            <p className={errorClass}>{errors.currentPassword.message}</p>
+          ) : null}
+        </label>
+        <label className="field">
           סיסמה חדשה
           <input
             type="password"
+            autoComplete="new-password"
             {...register('password', {
               validate: (password) => {
                 if (!password || password.length >= 6) {

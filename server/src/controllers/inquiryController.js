@@ -4,6 +4,7 @@ const {
   parsePositiveQuantity,
   parseOptionalText,
   isValidEmail,
+  isValidIsraeliPhone,
   normalizeEmail,
 } = require("../lib/parsers");
 const { getOrCreateCart } = require("./cartController");
@@ -11,11 +12,24 @@ const { getOrCreateCart } = require("./cartController");
 const INQUIRY_STATUSES = ["NEW", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const SCRIPT_TYPES = ["ASHKENAZI", "SEPHARDI"];
 
-function readInquiryContact({ script, contactEmail, contactPhone, message }) {
-  if (!SCRIPT_TYPES.includes(script)) {
-    return { error: "יש לבחור כתב אשכנזי או ספרדי." };
+function readScript(value) {
+  if (SCRIPT_TYPES.includes(value)) {
+    return value;
   }
 
+  return null;
+}
+
+function summaryScript(scripts) {
+  const unique = [...new Set(scripts)];
+  if (unique.length === 1) {
+    return unique[0];
+  }
+
+  return "MIXED";
+}
+
+function readInquiryContact({ contactEmail, contactPhone, message }) {
   const email = normalizeEmail(contactEmail);
   if (!isValidEmail(email)) {
     return { error: "יש לספק כתובת מייל תקינה." };
@@ -25,9 +39,11 @@ function readInquiryContact({ script, contactEmail, contactPhone, message }) {
   if (!phone) {
     return { error: "יש להזין טלפון." };
   }
+  if (!isValidIsraeliPhone(phone)) {
+    return { error: "יש להזין טלפון ישראלי תקין." };
+  }
 
   return {
-    script,
     email,
     phone,
     message: parseOptionalText(message) ?? null,
@@ -61,7 +77,6 @@ const inquiryInclude = {
 async function createInquiry(req, res, next) {
   try {
     const contact = readInquiryContact({
-      script: req.body.script,
       contactEmail: req.body.contactEmail,
       contactPhone: req.body.contactPhone,
       message: req.body.message,
@@ -75,18 +90,7 @@ async function createInquiry(req, res, next) {
       return res.status(400).json({ message: "יש לצרף לפחות מוצר אחד מהסל." });
     }
 
-    let userId = null;
-    if (req.body.userId !== undefined && req.body.userId !== null && req.body.userId !== "") {
-      userId = parsePositiveInt(req.body.userId);
-      if (!userId) {
-        return res.status(400).json({ message: "יש לספק userId תקין." });
-      }
-
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user) {
-        return res.status(404).json({ message: "המשתמש לא נמצא." });
-      }
-    }
+    const userId = req.user ? req.user.id : null;
 
     const normalizedItems = [];
     const productIds = [];
@@ -94,6 +98,7 @@ async function createInquiry(req, res, next) {
     for (const item of items) {
       const productId = parsePositiveInt(item.productId);
       const quantity = parsePositiveQuantity(item.quantity);
+      const script = readScript(item.script);
 
       if (!productId) {
         return res.status(400).json({ message: "כל פריט חייב לכלול productId תקין." });
@@ -101,8 +106,11 @@ async function createInquiry(req, res, next) {
       if (!quantity) {
         return res.status(400).json({ message: "כמות חייבת להיות מספר שלם חיובי." });
       }
+      if (!script) {
+        return res.status(400).json({ message: "יש לבחור כתב לכל קולמוס." });
+      }
 
-      normalizedItems.push({ productId, quantity });
+      normalizedItems.push({ productId, quantity, script });
       productIds.push(productId);
     }
 
@@ -131,7 +139,7 @@ async function createInquiry(req, res, next) {
       return tx.inquiry.create({
         data: {
           userId,
-          script: contact.script,
+          script: summaryScript(normalizedItems.map((item) => item.script)),
           contactEmail: contact.email,
           contactPhone: contact.phone,
           message: contact.message,
@@ -232,9 +240,8 @@ async function updateInquiryStatus(req, res, next) {
 
 async function createInquiryFromCart(req, res, next) {
   try {
-    const { itemIds, script, contactEmail, contactPhone } = req.body;
+    const { contactEmail, contactPhone } = req.body;
     const contact = readInquiryContact({
-      script,
       contactEmail,
       contactPhone,
       message: req.body.message,
@@ -243,7 +250,8 @@ async function createInquiryFromCart(req, res, next) {
       return res.status(400).json({ message: contact.error });
     }
 
-    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+    const lines = Array.isArray(req.body.items) ? req.body.items : null;
+    if (!lines || lines.length === 0) {
       return res.status(400).json({ message: "יש לסמן לפחות פריט אחד מהסל." });
     }
 
@@ -253,17 +261,26 @@ async function createInquiryFromCart(req, res, next) {
       return res.status(400).json({ message: "הסל ריק. לא ניתן ליצור פנייה." });
     }
 
-    const requestedIds = [];
-    for (const rawId of itemIds) {
-      const id = parsePositiveInt(rawId);
-      if (id) {
-        requestedIds.push(id);
+    const requested = [];
+    for (const line of lines) {
+      if (typeof line !== "object" || line === null) {
+        return res.status(400).json({ message: "יש לבחור כתב לכל קולמוס." });
       }
+      const id = parsePositiveInt(line.id);
+      const script = readScript(line.script);
+      if (!id || !script) {
+        return res.status(400).json({ message: "יש לבחור כתב לכל קולמוס." });
+      }
+      requested.push({ id, script });
     }
 
-    const selectedItems = cart.items.filter((item) => requestedIds.includes(item.id));
-    if (selectedItems.length === 0) {
-      return res.status(400).json({ message: "הפריטים שסומנו לא נמצאים בסל." });
+    const selectedItems = [];
+    for (const line of requested) {
+      const item = cart.items.find((entry) => entry.id === line.id);
+      if (!item) {
+        return res.status(400).json({ message: "הפריטים שסומנו לא נמצאים בסל." });
+      }
+      selectedItems.push({ ...item, script: line.script });
     }
 
     const unavailable = selectedItems.filter((item) => !item.product.isAvailable);
@@ -282,7 +299,7 @@ async function createInquiryFromCart(req, res, next) {
       const created = await tx.inquiry.create({
         data: {
           userId: req.user.id,
-          script: contact.script,
+          script: summaryScript(selectedItems.map((item) => item.script)),
           contactEmail: contact.email,
           contactPhone: contact.phone,
           message: contact.message,
@@ -290,6 +307,7 @@ async function createInquiryFromCart(req, res, next) {
             create: selectedItems.map((item) => ({
               productId: item.productId,
               quantity: item.quantity,
+              script: item.script,
             })),
           },
         },
